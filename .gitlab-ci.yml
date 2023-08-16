@@ -1,0 +1,750 @@
+stages:
+  - cleanjar
+  - build
+  - send
+  - images
+  - review
+  - deploy
+
+before_script:
+  - > 
+    if [ ! $CI_BUILD_TAG ]; then
+      echo "IS NULL"
+      export Pro_Ver=$CI_COMMIT_SHORT_SHA
+    else
+      export Pro_Ver=$CI_BUILD_TAG
+    fi;
+
+
+.java_for_build_job: &java_for_build_job
+  stage: build
+  image:
+    name: $JAVA_BUILD_IMAGE
+  tags:
+    - runner-19
+  script:
+    - >
+      curl  'https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=6a302bc5-0a7f-414e-bc2d-be081ff91cf1' \
+          -H 'Content-Type: application/json' \
+          -d '
+          {
+               "msgtype": "text",
+               "text": {
+               "content": "'"${BUILD_PATH}"'已更改,'"${CI_COMMIT_TITLE}"'"
+               }
+          }'
+    - /usr/share/maven/bin/mvn clean package deploy -Dmaven.test.skip -f ${BUILD_PATH}/pom.xml
+  artifacts:
+    name: ${CI_JOB_STAGE}_${CI_COMMIT_REF_NAME}
+    paths:
+      - ${BUILD_PATH}/target/*.jar
+
+
+.java_build_job: &java_build_job
+  stage: build
+  image:
+    name: $JAVA_BUILD_IMAGE
+  tags:
+    - runner-19
+  script:
+    - mvn clean package -Dmaven.test.skip -f ${BUILD_PATH}/pom.xml
+  artifacts:
+    name: ${CI_JOB_STAGE}_${CI_COMMIT_REF_NAME}
+    paths:
+      - ${BUILD_PATH}/target/*.jar
+
+
+.java_images_job: &java_images_job
+  stage: images
+  image:
+    name: $DOCKER_IMAGES
+  tags:
+    - runner-19
+  script:
+    - sed -i "s#BUILD_PATH#$BUILD_PATH#g" Dockerfile
+    - export Docker_Image=192.168.101.30/yhgit/$Image_Name:$Pro_Ver
+    - docker build -t $Docker_Image .
+    - docker login $Harbor_AddRess -u $Harbor_User -p $Harbor_Pwd
+    - docker push $Docker_Image
+    - docker rmi $Docker_Image
+
+.java_review_job: &java_review_job
+  stage: review
+  image:
+    name: $helm_deploy_image
+  tags:
+    - runner-19
+  script:
+    - export Collection_Name=ops-microservice KUBECONFIG=/root/.kube/config
+    - mkdir /root/.kube
+    - echo ${kube_config_dev} | base64 -d > ${KUBECONFIG}
+    - helm repo add yhgit http://192.168.101.30/chartrepo/yhgit
+    - helm repo update
+    - helm pull yhgit/${Collection_Name}
+    - tar -xf ${Collection_Name}-*.tgz
+    - >
+      if [ $(kubectl get ns | grep ^${Namespace}* | wc -l)  -eq 0 ]; then
+        kubectl create ns $Namespace
+      fi;
+    - >
+      if [ $(helm list -n $Namespace | grep $Release_Name | wc -l)  -eq 0 ]; then
+        helm install $Release_Name  ${Collection_Name}/$Release_Name -n $Namespace -f ${Collection_Name}/${Release_Name}/values-dev.yaml --set-string image.tag=$Pro_Ver
+      else
+        helm upgrade $Release_Name  ${Collection_Name}/$Release_Name -n $Namespace -f ${Collection_Name}/${Release_Name}/values-dev.yaml --set-string image.tag=$Pro_Ver
+      fi;
+
+.java_deploy_stag_job: &java_deploy_stag_job
+  stage: deploy
+  when: manual
+  image:
+    name: $helm_deploy_image
+  tags:
+    - runner-19
+  script:
+    - export Collection_Name=ops-microservice KUBECONFIG=/root/.kube/config
+    - mkdir /root/.kube
+    - echo ${kube_config_stag} | base64 -d > ${KUBECONFIG}
+    - helm repo add yhgit http://192.168.101.30/chartrepo/yhgit
+    - helm repo update
+    - helm pull yhgit/${Collection_Name}
+    - tar -xf ${Collection_Name}-*.tgz
+    - >
+      if [ $(kubectl get ns | grep ^${Namespace}* | wc -l)  -eq 0 ]; then
+        kubectl create ns $Namespace
+      fi;
+    - >
+      if [ $(helm list -n $Namespace | grep $Release_Name | wc -l)  -eq 0 ]; then
+        helm install $Release_Name  ${Collection_Name}/$Release_Name -n $Namespace -f ${Collection_Name}/${Release_Name}/values-stage.yaml --set-string image.tag=$Pro_Ver
+      else
+        helm upgrade $Release_Name  ${Collection_Name}/$Release_Name -n $Namespace -f ${Collection_Name}/${Release_Name}/values-stage.yaml --set-string image.tag=$Pro_Ver
+      fi;
+
+.java_deploy_ali_job: &java_deploy_ali_job
+  stage: deploy
+  image:
+    name: $helm_deploy_image
+  tags:
+    - runner-19
+  script:
+    - export Collection_Name=ops-microservice KUBECONFIG=/root/.kube/config
+    - mkdir /root/.kube
+    - echo ${kube_config_ali} | base64 -d > ${KUBECONFIG}
+    - helm repo add yhgit http://192.168.101.30/chartrepo/yhgit
+    - helm repo update
+    - helm pull yhgit/${Collection_Name}
+    - tar -xf ${Collection_Name}-*.tgz
+    - >
+      if [ $(kubectl get ns | grep ^${Namespace}* | wc -l)  -eq 0 ]; then
+        kubectl create ns $Namespace
+      fi;
+    - >
+      if [ $(helm list -n $Namespace | grep $Release_Name | wc -l)  -eq 0 ]; then
+        helm install $Release_Name  ${Collection_Name}/$Release_Name -n $Namespace -f ${Collection_Name}/${Release_Name}/values-ali.yaml --set-string image.tag=$Pro_Ver
+      else
+        helm upgrade $Release_Name  ${Collection_Name}/$Release_Name -n $Namespace -f ${Collection_Name}/${Release_Name}/values-ali.yaml --set-string image.tag=$Pro_Ver
+      fi;
+
+清除jar包: 
+  stage: cleanjar
+  only:
+    - develop
+    - production
+    - release
+  image:
+    name: 192.168.101.30/devops/alpine:3.13.4
+  tags:
+    - runner-19
+  script:
+    - rm -rf ~/.m2/repository/com/yhglobal/*
+
+
+######################################
+## yh-beans/yh-bean-authority
+yh_bean_authority_for_build:
+  <<: *java_for_build_job
+  only:
+    refs:
+      - develop
+      - production
+      - release
+    changes:
+      - yh-beans/yh-bean-authority/**/*
+  variables:
+    BUILD_PATH: yh-beans/yh-bean-authority
+
+
+## yh-beans/yh-bean-common
+yh_bean_common_for_build:
+  <<: *java_for_build_job
+  only:
+    refs:
+      - develop
+      - production
+      - release
+    changes:
+      - yh-beans/yh-bean-common/**/*
+  variables:
+    BUILD_PATH: yh-beans/yh-bean-common
+
+
+## yh-beans/yh-bean-data-dictionary
+yh_bean_data_dictionary_for_build:
+  <<: *java_for_build_job
+  only:
+    refs:
+      - develop
+      - production
+      - release
+    changes:
+      - yh-beans/yh-bean-data-dictionary/**/*
+  variables:
+    BUILD_PATH: yh-beans/yh-bean-data-dictionary
+
+
+
+## yh-common/yh-common-annotation
+yh_common_annotation_for_build:
+  <<: *java_for_build_job
+  only:
+    refs:
+      - develop
+      - production
+      - release
+    changes:
+      - yh-common/yh-common-annotation/**/*
+  variables:
+    BUILD_PATH: yh-common/yh-common-annotation
+
+
+## yh-common/yh-common-aspect
+yh_common_aspect_for_build:
+  <<: *java_for_build_job
+  only:
+    refs:
+      - develop
+      - production
+      - release
+    changes:
+      - yh-common/yh-common-aspect/**/*
+  variables:
+    BUILD_PATH: yh-common/yh-common-aspect
+
+
+## yh-common/yh-common-constant
+yh_common_constant_for_build:
+  <<: *java_for_build_job
+  only:
+    refs:
+      - develop
+      - production
+      - release
+    changes:
+      - yh-common/yh-common-constant/**/*
+  variables:
+    BUILD_PATH: yh-common/yh-common-constant
+
+
+## yh-common/yh-common-dto
+yh_common_dto_for_build:
+  <<: *java_for_build_job
+  only:
+    refs:
+      - develop
+      - production
+      - release
+    changes:
+      - yh-common/yh-common-dto/**/*
+  variables:
+    BUILD_PATH: yh-common/yh-common-dto
+
+
+## yh-common/yh-common-exception
+yh_common_exception_for_build:
+  <<: *java_for_build_job
+  only:
+    refs:
+      - develop
+      - production
+      - release
+    changes:
+      - yh-common/yh-common-exception/**/*
+  variables:
+    BUILD_PATH: yh-common/yh-common-exception
+
+
+## yh-common/yh-common-extension
+yh_common_extension_for_build:
+  <<: *java_for_build_job
+  only:
+    refs:
+      - develop
+      - production
+      - release
+    changes:
+      - yh-common/yh-common-extension/**/*
+  variables:
+    BUILD_PATH: yh-common/yh-common-extension
+
+
+## yh-common/yh-common-handler
+yh_common_handler_for_build:
+  <<: *java_for_build_job
+  only:
+    refs:
+      - develop
+      - production
+      - release
+    changes:
+      - yh-common/yh-common-handler/**/*
+  variables:
+    BUILD_PATH: yh-common/yh-common-handler
+
+
+## yh-common/yh-common-http
+yh_common_http_for_build:
+  <<: *java_for_build_job
+  only:
+    refs:
+      - develop
+      - production
+      - release
+    changes:
+      - yh-common/yh-common-http/**/*
+  variables:
+    BUILD_PATH: yh-common/yh-common-http
+
+
+## yh-common/yh-common-platform
+yh_common_platform_for_build:
+  <<: *java_for_build_job
+  only:
+    refs:
+      - develop
+      - production
+      - release
+    changes:
+      - yh-common/yh-common-platform/**/*
+  variables:
+    BUILD_PATH: yh-common/yh-common-platform
+
+
+## yh-common/yh-common-statemachine
+yh_common_statemachine_for_build:
+  <<: *java_for_build_job
+  only:
+    refs:
+      - develop
+      - production
+      - release
+    changes:
+      - yh-common/yh-common-statemachine/**/*
+  variables:
+    BUILD_PATH: yh-common/yh-common-statemachine
+
+
+## yh-common/yh-common-util
+yh_common_util_for_build:
+  <<: *java_for_build_job
+  only:
+    refs:
+      - develop
+      - production
+      - release
+    changes:
+      - yh-common/yh-common-util/**/*
+  variables:
+    BUILD_PATH: yh-common/yh-common-util
+
+
+## yh-infrastructure/yh-authority-starter
+yh_infrastructure_authority_starter_for_build:
+  <<: *java_for_build_job
+  only:
+    refs:
+      - develop
+      - production
+      - release
+    changes:
+      - yh-infrastructure/yh-authority-starter/**/*
+  variables:
+    BUILD_PATH: yh-infrastructure/yh-authority-starter
+
+
+## yh-infrastructure/yh-data-dictionary-starter
+yh_infrastructure_data_dictionary_starter_for_build:
+  <<: *java_for_build_job
+  only:
+    refs:
+      - develop
+      - production
+      - release
+    changes:
+      - yh-infrastructure/yh-data-dictionary-starter/**/*
+  variables:
+    BUILD_PATH: yh-infrastructure/yh-data-dictionary-starter
+
+
+## yh-infrastructure/yh-data-redundancy-starter
+yh_infrastructure_data_redundancy_starter_for_build:
+  <<: *java_for_build_job
+  only:
+    refs:
+      - develop
+      - production
+      - release
+    changes:
+      - yh-infrastructure/yh-data-redundancy-starter/**/*
+  variables:
+    BUILD_PATH: yh-infrastructure/yh-data-redundancy-starter
+
+
+## yh-infrastructure/yh-datasource-starter
+yh_infrastructure_datasource_starter_for_build:
+  <<: *java_for_build_job
+  only:
+    refs:
+      - develop
+      - production
+      - release
+    changes:
+      - yh-infrastructure/yh-datasource-starter/**/*
+  variables:
+    BUILD_PATH: yh-infrastructure/yh-datasource-starter
+
+
+## yh-infrastructure/yh-eas-starter
+yh_infrastructure_eas_starter_for_build:
+  <<: *java_for_build_job
+  only:
+    refs:
+      - develop
+      - production
+      - release
+    changes:
+      - yh-infrastructure/yh-eas-starter/**/*
+  variables:
+    BUILD_PATH: yh-infrastructure/yh-eas-starter
+
+
+## yh-infrastructure/yh-elk-starter
+yh_infrastructure_elk_starter_for_build:
+  <<: *java_for_build_job
+  only:
+    refs:
+      - develop
+      - production
+      - release
+    changes:
+      - yh-infrastructure/yh-elk-starter/**/*
+  variables:
+    BUILD_PATH: yh-infrastructure/yh-elk-starter
+
+
+## yh-infrastructure/yh-excel-starter
+yh_infrastructure_excel_starter_for_build:
+  <<: *java_for_build_job
+  only:
+    refs:
+      - develop
+      - production
+      - release
+    changes:
+      - yh-infrastructure/yh-excel-starter/**/*
+  variables:
+    BUILD_PATH: yh-infrastructure/yh-excel-starter
+
+
+## yh-infrastructure/yh-gateway-starter
+yh_infrastructure_gateway_starter_for_build:
+  <<: *java_for_build_job
+  only:
+    refs:
+      - develop
+      - production
+      - release
+    changes:
+      - yh-infrastructure/yh-gateway-starter/**/*
+  variables:
+    BUILD_PATH: yh-infrastructure/yh-gateway-starter
+
+
+## yh-infrastructure/yh-i18n-starter
+yh_infrastructure_i18n_starter_for_build:
+  <<: *java_for_build_job
+  only:
+    refs:
+      - develop
+      - production
+      - release
+    changes:
+      - yh-infrastructure/yh-i18n-starter/**/*
+  variables:
+    BUILD_PATH: yh-infrastructure/yh-i18n-starter
+
+
+## yh-infrastructure/yh-job-starter
+yh_infrastructure_job_starter_for_build:
+  <<: *java_for_build_job
+  only:
+    refs:
+      - develop
+      - production
+      - release
+    changes:
+      - yh-infrastructure/yh-job-starter/**/*
+  variables:
+    BUILD_PATH: yh-infrastructure/yh-job-starter
+
+
+## yh-infrastructure/yh-mongodb-starter
+yh_infrastructure_mongodb_starter_for_build:
+  <<: *java_for_build_job
+  only:
+    refs:
+      - develop
+      - production
+      - release
+    changes:
+      - yh-infrastructure/yh-mongodb-starter/**/*
+  variables:
+    BUILD_PATH: yh-infrastructure/yh-mongodb-starter
+
+
+## yh-infrastructure/yh-mq-starter
+yh_infrastructure_mq_starter_for_build:
+  <<: *java_for_build_job
+  only:
+    refs:
+      - develop
+      - production
+      - release
+    changes:
+      - yh-infrastructure/yh-mq-starter/**/*
+  variables:
+    BUILD_PATH: yh-infrastructure/yh-mq-starter
+
+
+## yh-infrastructure/yh-mybatis-datasource-starter
+yh_infrastructure_mybatis_datasource_starter_for_build:
+  <<: *java_for_build_job
+  only:
+    refs:
+      - develop
+      - production
+      - release
+    changes:
+      - yh-infrastructure/yh-mybatis-datasource-starter/**/*
+  variables:
+    BUILD_PATH: yh-infrastructure/yh-mybatis-datasource-starter
+
+
+## yh-infrastructure/yh-oss-starter
+yh_infrastructure_oss_starter_for_build:
+  <<: *java_for_build_job
+  only:
+    refs:
+      - develop
+      - production
+      - release
+    changes:
+      - yh-infrastructure/yh-oss-starter/**/*
+  variables:
+    BUILD_PATH: yh-infrastructure/yh-oss-starter
+
+
+## yh-infrastructure/yh-redis-starter
+yh_infrastructure_redis_starter_for_build:
+  <<: *java_for_build_job
+  only:
+    refs:
+      - develop
+      - production
+      - release
+    changes:
+      - yh-infrastructure/yh-redis-starter/**/*
+  variables:
+    BUILD_PATH: yh-infrastructure/yh-redis-starter
+
+
+## yh-infrastructure/yh-swagger-starter
+yh_infrastructure_swagger_starter_for_build:
+  <<: *java_for_build_job
+  only:
+    refs:
+      - develop
+      - production
+      - release
+    changes:
+      - yh-infrastructure/yh-swagger-starter/**/*
+  variables:
+    BUILD_PATH: yh-infrastructure/yh-swagger-starter
+
+
+## yh-infrastructure/yh-swms-starter
+yh_infrastructure_swms_starter_for_build:
+  <<: *java_for_build_job
+  only:
+    refs:
+      - develop
+      - production
+      - release
+    changes:
+      - yh-infrastructure/yh-swms-starter/**/*
+  variables:
+    BUILD_PATH: yh-infrastructure/yh-swms-starter
+
+## yh-infrastructure/yh-es-log-starter
+yh_infrastructure_es_log_starter_for_build:
+  <<: *java_for_build_job
+  only:
+    refs:
+      - develop
+      - production
+      - release
+    changes:
+      - yh-infrastructure/yh-es-log-starter/**/*
+  variables:
+    BUILD_PATH: yh-infrastructure/yh-es-log-starter
+
+
+## yh-infrastructure/yh-tms-starter
+yh_infrastructure_tms_starter_for_build:
+  <<: *java_for_build_job
+  only:
+    refs:
+      - develop
+      - production
+      - release
+    changes:
+      - yh-infrastructure/yh-tms-starter/**/*
+  variables:
+    BUILD_PATH: yh-infrastructure/yh-tms-starter
+
+
+## yh-infrastructure/yh-tx-lcn-starter
+yh_infrastructure_tx_lcn_starter_for_build:
+  <<: *java_for_build_job
+  only:
+    refs:
+      - develop
+      - production
+      - release
+    changes:
+      - yh-infrastructure/yh-tx-lcn-starter/**/*
+  variables:
+    BUILD_PATH: yh-infrastructure/yh-tx-lcn-starter
+
+
+## yh-infrastructure/yh-validate-starter
+yh_infrastructure_validate_starter_for_build:
+  <<: *java_for_build_job
+  only:
+    refs:
+      - develop
+      - production
+      - release
+    changes:
+      - yh-infrastructure/yh-validate-starter/**/*
+  variables:
+    BUILD_PATH: yh-infrastructure/yh-validate-starter
+
+
+## yh-infrastructure/yh-app-sts-starter
+yh_infrastructure_app_sts_starter_for_build:
+  <<: *java_for_build_job
+  only:
+    refs:
+      - develop
+      - production
+      - release
+    changes:
+      - yh-infrastructure/yh-app-sts-starter/**/*
+  variables:
+    BUILD_PATH: yh-infrastructure/yh-app-sts-starter
+
+
+## yh-infrastructure/yh-sts-starter
+yh_infrastructure_sts_starter_for_build:
+  <<: *java_for_build_job
+  only:
+    refs:
+      - develop
+      - production
+      - release
+    changes:
+      - yh-infrastructure/yh-sts-starter/**/*
+  variables:
+    BUILD_PATH: yh-infrastructure/yh-sts-starter
+
+
+## yh-infrastructure/yh-operation-log-starter
+yh_infrastructure_operation_log_starter_for_build:
+  <<: *java_for_build_job
+  only:
+    refs:
+      - develop
+      - production
+      - release
+    changes:
+      - yh-infrastructure/yh-operation-log-starter/**/*
+  variables:
+    BUILD_PATH: yh-infrastructure/yh-operation-log-starter
+
+## yh-infrastructure/yh-prometheus-starter
+yh_infrastructure_prometheus_starter_for_build:
+  <<: *java_for_build_job
+  only:
+    refs:
+      - develop
+      - production
+      - release
+    changes:
+      - yh-infrastructure/yh-prometheus-starter/**/*
+  variables:
+    BUILD_PATH: yh-infrastructure/yh-prometheus-starter
+
+## yh-infrastructure/yh-wechat-work-starter
+yh_infrastructure_wechat_work_starter_for_build:
+  <<: *java_for_build_job
+  only:
+    refs:
+      - develop
+      - production
+      - release
+    changes:
+      - yh-infrastructure/yh-wechat-work-starter/**/*
+  variables:
+    BUILD_PATH: yh-infrastructure/yh-wechat-work-starter
+
+
+## yh-server-api/api-common
+yh_infrastructure_mdm_data_starter_for_build:
+  <<: *java_for_build_job
+  only:
+    refs:
+      - develop
+      - production
+      - release
+    changes:
+      - yh-infrastructure/yh-mdm-data-starter/**/*
+  variables:
+    BUILD_PATH: yh-infrastructure/yh-mdm-data-starter
+## yh-server-api/api-common
+yh_server_api_common_for_build:
+  <<: *java_for_build_job
+  only:
+    refs:
+      - develop
+      - production
+      - release
+    changes:
+      - yh-server-api/api-common/**/*
+  variables:
+    BUILD_PATH: yh-server-api/api-common
+
+
+
+
+
+
+

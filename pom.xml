@@ -1,0 +1,206 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <parent>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-parent</artifactId>
+        <version>2.7.1</version>
+        <relativePath/>
+    </parent>
+
+    <modelVersion>4.0.0</modelVersion>
+    <groupId>com.yhglobal.bee</groupId>
+    <artifactId>core</artifactId>
+    <version>${yh.version}</version>
+    <packaging>pom</packaging>
+
+    <modules>
+        <module>yh-beans</module>
+        <module>yh-server-api</module>
+        <module>yh-common</module>
+        <module>yh-infrastructure</module>
+    </modules>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>flatten-maven-plugin</artifactId>
+                <version>1.1.0</version>
+                <configuration>
+                    <updatePomFile>true</updatePomFile>
+                    <flattenMode>resolveCiFriendliesOnly</flattenMode>
+                </configuration>
+                <executions>
+                    <execution>
+                        <id>flatten</id>
+                        <phase>process-resources</phase>
+                        <goals>
+                            <goal>flatten</goal>
+                        </goals>
+                    </execution>
+                    <execution>
+                        <id>flatten.clean</id>
+                        <phase>clean</phase>
+                        <goals>
+                            <goal>clean</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+<!--            <plugin>-->
+<!--                <groupId>org.apache.maven.plugins</groupId>-->
+<!--                <artifactId>maven-compiler-plugin</artifactId>-->
+<!--                <version>${maven-compiler-plugin.version}</version>-->
+<!--                <configuration>-->
+<!--                    <source>11</source>-->
+<!--                    <target>11</target>-->
+<!--                </configuration>-->
+<!--            </plugin>-->
+
+        </plugins>
+    </build>
+
+    <profiles>
+        <profile>
+            <id>release</id>
+            <build>
+                <plugins>
+                    <!-- Source -->
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-source-plugin</artifactId>
+                        <version>${maven-source-plugin.version}</version>
+                        <executions>
+                            <execution>
+                                <phase>package</phase>
+                                <goals>
+                                    <goal>jar-no-fork</goal>
+                                </goals>
+                            </execution>
+                        </executions>
+                    </plugin>
+                    <!-- Javadoc -->
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-javadoc-plugin</artifactId>
+                        <version>${maven-javadoc-plugin.version}</version>
+                        <executions>
+                            <execution>
+                                <phase>package</phase>
+                                <goals>
+                                    <goal>jar</goal>
+                                </goals>
+                                <configuration>
+                                    <doclint>none</doclint>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                    <!-- GPG -->
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-gpg-plugin</artifactId>
+                        <version>1.6</version>
+                        <configuration>
+                            <useAgent>false</useAgent>
+                        </configuration>
+                        <executions>
+                            <execution>
+                                <phase>verify</phase>
+                                <goals>
+                                    <goal>sign</goal>
+                                </goals>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+    </profiles>
+
+    <distributionManagement>
+        <snapshotRepository>
+            <id>nexus-snapshots</id>
+            <url>https://nexus.yhglobal.cn/repository/maven-snapshots/</url>
+        </snapshotRepository>
+        <repository>
+            <id>nexus-releases</id>
+            <url>https://nexus.yhglobal.cn/repository/maven-releases/</url>
+        </repository>
+    </distributionManagement>
+
+
+    <properties>
+
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <maven-compiler-plugin.version>3.8.1</maven-compiler-plugin.version>
+        <maven-surefire-plugin.version>3.0.0-M3</maven-surefire-plugin.version>
+        <maven-jar-plugin.version>3.1.0</maven-jar-plugin.version>
+        <maven-dependency-plugin.version>3.1.0</maven-dependency-plugin.version>
+        <yh.version>2.0</yh.version>
+        <spring.version>5.3.2.RELEASE</spring.version>
+        <junit.version>4.12</junit.version>
+        <servlet-api.version>2.5</servlet-api.version>
+        <jsp-api.version>2.1</jsp-api.version>
+        <jstl.version>1.2</jstl.version>
+        <maven-deploy-plugin.version>2.8.2</maven-deploy-plugin.version>
+        <mybatis.version>3.5.6</mybatis.version>
+        <mybatis-plus.version>3.5.2</mybatis-plus.version>
+        <mysql-connector-java.version>8.0.12</mysql-connector-java.version>
+        <protobuf-java.version>3.5.1</protobuf-java.version>
+        <poi.version>3.17</poi.version>
+        <easy.poi.version>3.15</easy.poi.version>
+        <easy.excel.version>3.3.2</easy.excel.version>
+        <validation-api.version>2.0.1.Final</validation-api.version>
+        <hibernate-validator.version>6.1.2.Final</hibernate-validator.version>
+        <pagehelper.version>1.3.0</pagehelper.version>
+        <pagehelper1.version>5.2.0</pagehelper1.version>
+        <fastjson.version>1.2.58</fastjson.version>
+        <druid.version>1.1.15</druid.version>
+        <guava.version>22.0</guava.version>
+        <jedis.version>3.0.1</jedis.version>
+        <grpc.version>1.12.0</grpc.version>
+        <okhttp.version>4.8.1</okhttp.version>
+        <!-- easypoi的依赖很多 需依应用情况看是否exclude掉: poi/spring/guava/common-lang/... -->
+        <easypoi.version>3.2.0</easypoi.version>
+        <resilience4j.spring.cloud>1.6.1</resilience4j.spring.cloud>
+        <opencsv.version>4.3.2</opencsv.version>
+        <commons-io.version>2.6</commons-io.version>
+        <commons-net.version>3.6</commons-net.version>
+        <commons-lang3.version>3.12.0</commons-lang3.version>
+        <commons-fileupload.version>1.3</commons-fileupload.version>
+        <aspectj.version>1.9.4</aspectj.version>
+        <yhglobal.sdk.version>1.0</yhglobal.sdk.version>
+        <lombok.version>1.18.24</lombok.version>
+        <spring-cloud.version>2021.0.3</spring-cloud.version>
+        <spring-alibaba-cloud.version>2021.0.1.0</spring-alibaba-cloud.version>
+        <java.version>11</java.version>
+        <google.gson.version>2.8.6</google.gson.version>
+        <jackson.version>2.13.3</jackson.version>
+        <xxl.job.version>2.3.0</xxl.job.version>
+        <jjwt.version>0.9.1</jjwt.version>
+        <ali.oss.version>3.10.2</ali.oss.version>
+        <swagger.version>3.0.0</swagger.version>
+        <swagger.model.version>1.6.0</swagger.model.version>
+        <druid.spring.version>1.2.5</druid.spring.version>
+        <mybaits.spring.version>2.1.4</mybaits.spring.version>
+        <caffeine.version>2.8.8</caffeine.version>
+        <redis.connection.version>6.0.2.RELEASE</redis.connection.version>
+        <logback.es.version>1.7</logback.es.version>
+        <spring-retry>1.3.1</spring-retry>
+        <seata.version>1.5.1</seata.version>
+        <kryo.version>0.44</kryo.version>
+        <reflections.version>0.10.2</reflections.version>
+        <kryo.esotericsoftware.version>4.0.2</kryo.esotericsoftware.version>
+        <slf4j-api.version>1.7.36</slf4j-api.version>
+        <xml.bind.version>2.3.0</xml.bind.version>
+        <mybatis.mapper.version>2.0.0</mybatis.mapper.version>
+    </properties>
+
+
+
+
+
+</project>

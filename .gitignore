@@ -1,0 +1,11 @@
+**/node_modules/*
+**/package-lock.json
+**/dist/*
+**/.idea/*
+**/*.iml
+**/target/*
+**/.wechatide/*
+**/.DS_Store/*
+**/.DS_Store
+**/*.log
+**/src/main/vuetarget/*
